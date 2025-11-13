@@ -104,13 +104,26 @@ exports.update = async (req, res) => {
     const payload = {};
     if (product_name) payload.product_name = product_name;
     if (grade) payload.grade = grade;
+
+    // ✅ ตรวจสอบและแปลงให้เป็นตัวเลขเสมอ
     if (quantity_total !== undefined) {
-      const diff = quantity_total - listing.quantity_total;
-      payload.quantity_total = quantity_total;
-      payload.quantity_available = (listing.quantity_available || 0) + diff;
+      const newQty = parseFloat(quantity_total);
+      if (isNaN(newQty) || newQty < 0)
+        return res.status(400).json({ message: 'quantity_total ต้องเป็นตัวเลขบวก' });
+
+      const diff = newQty - Number(listing.quantity_total);
+      payload.quantity_total = newQty;
+      payload.quantity_available = (Number(listing.quantity_available) || 0) + diff;
       if (payload.quantity_available < 0) payload.quantity_available = 0;
     }
-    if (price_per_unit) payload.price_per_unit = price_per_unit;
+
+    if (price_per_unit !== undefined) {
+      const newPrice = parseFloat(price_per_unit);
+      if (isNaN(newPrice) || newPrice < 0)
+        return res.status(400).json({ message: 'price_per_unit ต้องเป็นตัวเลขบวก' });
+      payload.price_per_unit = newPrice;
+    }
+
     if (pickup_date) payload.pickup_date = pickup_date;
     if (description) payload.description = description;
 
@@ -127,7 +140,9 @@ exports.update = async (req, res) => {
       const farmer = await Farmers.findByPk(identity.id);
       if (farmer && farmer.address) {
         const coords = await geocodeAddress(farmer.address);
-        if (coords) payload.location_geom = { type: 'Point', coordinates: [coords.lng, coords.lat] };
+        if (coords) {
+          payload.location_geom = { type: 'Point', coordinates: [coords.lng, coords.lat] };
+        }
       }
     }
 
