@@ -14,6 +14,12 @@ module.exports = (sequelize) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+
+    meta: {
+      type: DataTypes.JSONB,   // ← เพิ่มใหม่
+      allowNull: true
+    },
+
     created_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW

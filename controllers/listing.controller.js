@@ -4,6 +4,7 @@ const Listings = db.Listings;
 const Farmers = db.Farmers;
 const { geocodeAddress } = require('../utils/geocode');
 const { Op } = require('sequelize');
+const { haversineDistance } = require('../utils/distance');
 
 // ✅ รายการสินค้าและเกรดที่อนุญาต (ใช้ dropdown)
 const allowedProducts = ['มะม่วง', 'มังคุด', 'ทุเรียน', 'องุ่น'];
@@ -15,8 +16,8 @@ exports.getAll = async (req, res) => {
     const { product_name, status } = req.query;
     const where = {};
 
-    if (product_name) where.product_name = product_name;
-    if (status) where.status = status;
+    if (product_name) where.product_name = product_name.trim();
+    if (status) where.status = status.trim();
 
     const rows = await Listings.findAll({
       where,
@@ -50,8 +51,8 @@ exports.getMyListings = async (req, res) => {
     };
 
     // 4. เพิ่ม filter (ถ้ามี)
-    if (product_name) where.product_name = product_name;
-    if (status) where.status = status;
+    if (product_name) where.product_name = product_name.trim();
+    if (status) where.status = status.trim();
 
     // 5. ค้นหาแบบเดียวกับ getAll
     const rows = await Listings.findAll({
@@ -89,35 +90,18 @@ exports.getById = async (req, res) => {
 exports.create = async (req, res) => {
   try {
     const identity = req.identity;
-    // (ลบการตรวจสอบ Role ออกแล้ว เพราะ Routes จัดการให้)
+    const { product_name, grade, quantity_total, price_per_unit, pickup_date, description, image_urls, unit } = req.body;
 
-    const {
-      product_name, grade, quantity_total, price_per_unit,
-      pickup_date, description, image_urls
-    } = req.body;
-
-    // ✅ ตรวจสอบ required fields
     if (!product_name || !quantity_total || !price_per_unit || !pickup_date) {
-      return res.status(400).json({
-        message: 'กรุณากรอกชื่อสินค้า, จำนวน, ราคาต่อหน่วย, และวันที่สะดวกรับสินค้า'
-      });
+      return res.status(400).json({ message: 'กรุณากรอกชื่อสินค้า, จำนวน, ราคาต่อหน่วย, และวันที่สะดวกรับสินค้า' });
     }
-
-    // ✅ ตรวจสอบว่ามาจาก dropdown จริง ๆ
-    if (!allowedProducts.includes(product_name)) {
-      return res.status(400).json({ message: 'ชื่อสินค้าที่เลือกไม่ถูกต้อง' });
-    }
-
-    if (grade && !allowedGrades.includes(grade)) {
-      return res.status(400).json({ message: 'เกรดสินค้าที่เลือกไม่ถูกต้อง' });
-    }
-
-    // ✅ ตรวจสอบรูป
+    if (!allowedProducts.includes(product_name)) return res.status(400).json({ message: 'ชื่อสินค้าที่เลือกไม่ถูกต้อง' });
+    if (grade && !allowedGrades.includes(grade)) return res.status(400).json({ message: 'เกรดสินค้าที่เลือกไม่ถูกต้อง' });
     if (!image_urls || !Array.isArray(image_urls) || image_urls.length === 0) {
       return res.status(400).json({ message: 'กรุณาใส่รูปสินค้าขึ้นไปอย่างน้อย 1 รูป' });
     }
 
-    // ✅ แปลงพิกัดจากที่อยู่เกษตรกร
+    // location_geom from farmer profile if available
     let location_geom = null;
     const farmer = await Farmers.findByPk(identity.id);
     if (farmer && farmer.address) {
@@ -125,13 +109,13 @@ exports.create = async (req, res) => {
       if (coords) location_geom = { type: 'Point', coordinates: [coords.lng, coords.lat] };
     }
 
-    // ✅ สร้างรายการขายใหม่
     const newListing = await Listings.create({
       seller_id: identity.id,
       product_name,
       grade: grade || null,
       quantity_total,
       quantity_available: quantity_total,
+      unit: unit || null,
       price_per_unit,
       pickup_date,
       description: description || null,
@@ -140,25 +124,115 @@ exports.create = async (req, res) => {
       location_geom
     });
 
-    console.log(`✅ New listing created: ${product_name} (${grade || 'ไม่มีเกรด'}) by farmer ${identity.id}`);
-
-    // ✅ Matching กับ Demand (เปลี่ยน iLike → เท่ากับ)
+    // ========== Matching logic ==========
+    // find open demands with same product_name and desired_quantity <= available
     const demands = await db.Demands.findAll({
       where: {
-        product_name: product_name,
+        product_name: product_name, // exact match (you may relax)
+        desired_quantity: { [Op.lte]: quantity_total },
         status: 'open'
       }
     });
 
+    // prepare array with distance
+    const notifyList = [];
     for (const d of demands) {
-      await db.Notifications.create({
-        user_id: d.buyer_id,
-        type: 'match',
-        message: `พบรายการขายตรงกับสิ่งที่คุณต้องการ: ${product_name}`
-      });
+      // get buyer coords: priority use demand.location_geom else fetch buyer record
+      let buyerCoords = null;
+      if (d.location_geom && d.location_geom.coordinates) {
+        buyerCoords = { lat: d.location_geom.coordinates[1], lng: d.location_geom.coordinates[0] };
+      } else {
+        const buyer = await db.Buyers.findByPk(d.buyer_id);
+        if (buyer && buyer.address) {
+          const coords = await geocodeAddress(buyer.address);
+          if (coords) buyerCoords = coords;
+        }
+      }
+      // if we have both listing coords and buyer coords compute distance
+      if (location_geom && location_geom.coordinates && buyerCoords) {
+        const lat1 = location_geom.coordinates[1];
+        const lon1 = location_geom.coordinates[0];
+        const lat2 = buyerCoords.lat;
+        const lon2 = buyerCoords.lng;
+        const distance_km = haversineDistance(lat2, lon2, lat1, lon1); // note order lat lon
+        notifyList.push({ demand: d, distance_km });
+      } else {
+        notifyList.push({ demand: d, distance_km: null });
+      }
     }
 
-    // ✅ ส่ง response กลับ
+    // sort by distance (nulls go last)
+    notifyList.sort((a, b) => {
+      if (a.distance_km === null) return 1;
+      if (b.distance_km === null) return -1;
+      return a.distance_km - b.distance_km;
+    });
+
+    // send notifications (create Matches + Notifications + realtime/FCM)
+    const emitToUser = req.app.locals.emitToUser;
+    const admin = req.app.locals.firebaseAdmin;
+
+    for (const item of notifyList) {
+      const d = item.demand;
+      const distance_km = item.distance_km;
+      // create Match record (optional)
+      await db.Matches.create({
+        listing_id: newListing.id,
+        demand_id: d.id,
+        distance_km: distance_km,
+        matched_price: newListing.price_per_unit,
+        status: 'pending'
+      });
+
+      // build notification payload
+      const messageText = `พบรายการขายตรงกับความต้องการของคุณ: ${newListing.product_name} ราคา ${newListing.price_per_unit} บาท/${newListing.unit || ''}` +
+        (distance_km ? ` | ระยะทาง ${distance_km} km` : '');
+
+      const notificationRecord = await db.Notifications.create({
+        user_id: d.buyer_id,
+        type: 'match',
+        message: messageText
+      });
+
+      // realtime via socket.io if online
+      const pushed = emitToUser(d.buyer_id, 'notification', {
+        id: notificationRecord.id,
+        listing: {
+          id: newListing.id,
+          product_name: newListing.product_name,
+          price_per_unit: newListing.price_per_unit,
+          unit: newListing.unit,
+          pickup_date: newListing.pickup_date,
+          image_url: newListing.image_url,
+        },
+        distance_km
+      });
+
+      // if not online -> send FCM push
+      if (!pushed) {
+        try {
+          // assume buyer has deviceToken stored; you should add device_token to Buyers table or a DeviceTokens table.
+          const buyer = await db.Buyers.findByPk(d.buyer_id);
+          if (buyer && buyer.device_token) {
+            await admin.messaging().send({
+              token: buyer.device_token,
+              notification: {
+                title: 'มีรายการขายที่ตรงกับความต้องการของคุณ',
+                body: messageText
+              },
+              data: {
+                type: 'match',
+                listing_id: String(newListing.id)
+              }
+            });
+          }
+        } catch (e) {
+          console.error('FCM send failed', e);
+        }
+      }
+    }
+
+    // response
     res.status(201).json({ message: 'Listing created', listing: newListing });
   } catch (err) {
     console.error(err);

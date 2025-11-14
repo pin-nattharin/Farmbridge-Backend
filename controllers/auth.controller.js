@@ -1,6 +1,7 @@
 const db = require('../models');
 const Farmers = db.Farmers;
 const Buyers = db.Buyers;
+const InvalidTokens = db.InvalidTokens;
 const { hash, compare } = require('../utils/bcrypt');
 const { sign } = require('../utils/jwt');
 const { geocodeAddress } = require('../utils/geocode');
@@ -112,19 +113,21 @@ exports.login = async (req, res) => {
 // logout
 exports.logout = async (req, res) => {
   try {
-    
-    res.status(200).json({ message: 'Logged out successfully' });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(400).json({ message: 'No token provided' });
 
+    // เก็บ token ลง blacklist
+    await InvalidTokens.create({
+      token,
+      expired_at: new Date(Date.now() + 24*60*60*1000) // เก็บ 1 วัน หรือเอาเวลาหมดอายุจริงจาก JWT
+    });
+
+    res.status(200).json({ message: 'Logged out successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Logout failed', error: err.message });
   }
 };
-
-
-
-
-
 
 exports.getProfile = async (req, res) => {
   try {

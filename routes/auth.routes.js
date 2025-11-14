@@ -18,5 +18,4 @@ router.get('/profile', [authenticateToken], authController.getProfile);
 // PUT /api/auth/profile
 router.put('/profile', [authenticateToken], authController.updateProfile);
 
-
 module.exports = router;
