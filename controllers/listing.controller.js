@@ -7,7 +7,7 @@ const { Op } = require('sequelize');
 
 // ✅ รายการสินค้าและเกรดที่อนุญาต (ใช้ dropdown)
 const allowedProducts = ['มะม่วง', 'มังคุด', 'ทุเรียน', 'องุ่น'];
-const allowedGrades = ['เกรด A', 'เกรด B', 'เกรด C'];
+const allowedGrades = ['เกรด B', 'เกรด C', 'เกรดต่ำกว่า C'];
 
 // GET all listings (optional filters: product_name, status)
 exports.getAll = async (req, res) => {

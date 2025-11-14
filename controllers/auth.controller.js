@@ -120,3 +120,83 @@ exports.logout = async (req, res) => {
     res.status(500).json({ message: 'Logout failed', error: err.message });
   }
 };
+
+
+
+
+
+
+exports.getProfile = async (req, res) => {
+  try {
+    
+    const user = req.identity.model;
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({
+      id: user.id,
+      fullname: user.fullname,
+      email: user.email,
+      phone: user.phone,
+      address: user.address,
+      role: req.identity.role,
+      
+      ...(req.identity.role === 'farmer' && { farmer_doc_url: user.farmer_doc_url })
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to get profile', error: err.message });
+  }
+};
+
+// PUT Profile 
+exports.updateProfile = async (req, res) => {
+  try {
+    
+    const { fullname, phone, address } = req.body;
+
+  
+    const user = req.identity.model;
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+   
+    const payload = {};
+    if (fullname) payload.fullname = fullname;
+    if (phone) payload.phone = phone;
+
+   
+    if (address) {
+      payload.address = address;
+      const coords = await geocodeAddress(address);
+      if (coords) {
+        payload.location_geom = { type: 'Point', coordinates: [coords.lng, coords.lat] };
+      } else {
+        payload.location_geom = null; // ถ้าหาพิกัดไม่เจอ
+      }
+    }
+
+  
+    await user.update(payload);
+
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user.id,
+        fullname: user.fullname,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        role: req.identity.role
+      }
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to update profile', error: err.message });
+  }
+};
