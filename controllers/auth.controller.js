@@ -11,26 +11,23 @@ exports.register = async (req, res) => {
   try {
     const { fullname, email, password, phone, address, farmer_doc_url } = req.body;
 
-    if (!fullname || !email || !password) {
-      return res.status(400).json({ message: 'fullname, email, and password are required' });
-    }
-
     const lowerEmail = email.toLowerCase();
     const password_hash = await hash(password);
 
-    // ตรวจสอบ role จาก farmer_doc_url
-    let role = farmer_doc_url ? 'farmer' : 'buyer';
+    // กำหนด role อัตโนมัติ
+    const role = farmer_doc_url ? 'farmer' : 'buyer';
 
-    // แปลง address เป็นพิกัด
+    // geocode address → location_geom
     let location_geom = null;
     if (address) {
       const coords = await geocodeAddress(address);
-      if (coords) location_geom = { type: 'Point', coordinates: [coords.lng, coords.lat] };
+      if (coords)
+        location_geom = { type: 'Point', coordinates: [coords.lng, coords.lat] };
     }
 
     if (role === 'farmer') {
-      const ex = await Farmers.findOne({ where: { email: lowerEmail } });
-      if (ex) return res.status(400).json({ message: 'Email already exists (farmer)' });
+      const exists = await Farmers.findOne({ where: { email: lowerEmail } });
+      if (exists) return res.status(400).json({ message: 'Email exists' });
 
       const farmer = await Farmers.create({
         fullname,
@@ -43,6 +40,7 @@ exports.register = async (req, res) => {
       });
 
       const token = sign({ id: farmer.id, role: 'farmer' });
+
       return res.status(201).json({
         message: 'Farmer registered',
         token,
@@ -51,8 +49,8 @@ exports.register = async (req, res) => {
 
     } else {
       // buyer
-      const ex = await Buyers.findOne({ where: { email: lowerEmail } });
-      if (ex) return res.status(400).json({ message: 'Email already exists (buyer)' });
+      const exists = await Buyers.findOne({ where: { email: lowerEmail } });
+      if (exists) return res.status(400).json({ message: 'Email exists' });
 
       const buyer = await Buyers.create({
         fullname,
@@ -64,13 +62,13 @@ exports.register = async (req, res) => {
       });
 
       const token = sign({ id: buyer.id, role: 'buyer' });
+
       return res.status(201).json({
         message: 'Buyer registered',
         token,
         user: { id: buyer.id, fullname: buyer.fullname, email: buyer.email, role: 'buyer' }
       });
     }
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Register failed', error: err.message });

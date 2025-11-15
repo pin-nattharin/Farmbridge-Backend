@@ -1,17 +1,22 @@
-const fetch = require('node-fetch');
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+require('dotenv').config();
 
-/**
- * แปลง address → latitude, longitude
- * @param {string} address
- * @returns {Promise<{lat:number, lng:number}|null>}
- */
 async function geocodeAddress(address) {
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'FarmBridgeApp/1.0' } });
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    console.log("GOOGLE_MAPS_API_KEY =", apiKey);
+
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+    console.log("Geocode URL:", url);
+
+    const res = await fetch(url);
     const data = await res.json();
-    if (!data || data.length === 0) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    console.log("Geocode API response:", data);
+
+    if (!data.results.length) return null;
+
+    const { lat, lng } = data.results[0].geometry.location;
+    return { lat, lng };
   } catch (err) {
     console.error('Geocode failed', err);
     return null;
