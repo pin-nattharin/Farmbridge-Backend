@@ -41,5 +41,12 @@ module.exports = (sequelize) => {
     timestamps: false
   });
 
+
+  Transactions.associate = (models) => {
+    // (เราเพิ่มไว้เผื่อๆ แต่โค้ดใหม่จะไม่เรียกใช้)
+    Transactions.belongsTo(models.Buyers, { foreignKey: 'buyer_id' });
+    Transactions.belongsTo(models.Farmers, { foreignKey: 'seller_id' });
+  };
+
   return Transactions;
 };

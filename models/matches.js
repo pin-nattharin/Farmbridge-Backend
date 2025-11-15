@@ -25,5 +25,11 @@ module.exports = (sequelize) => {
     timestamps: false
   });
 
+
+  Matches.associate = (models) => {
+    Matches.belongsTo(models.Listings, { foreignKey: 'listing_id' });
+    Matches.belongsTo(models.Demands, { foreignKey: 'demand_id' });
+  };
+
   return Matches;
 };

@@ -32,5 +32,11 @@ module.exports = (sequelize) => {
     timestamps: false
   });
 
+Demands.associate = (models) => {
+    Demands.belongsTo(models.Buyers, { foreignKey: 'buyer_id', as: 'buyer' });
+    Demands.hasMany(models.Matches, { foreignKey: 'demand_id' });
+  };
+
+
   return Demands;
 };

@@ -39,5 +39,12 @@ module.exports = (sequelize) => {
     timestamps: false
   });
 
+
+Buyers.associate = (models) => {
+    Buyers.hasMany(models.Demands, { foreignKey: 'buyer_id', as: 'demands' });
+    // (นี่คือความสัมพันธ์ใหม่สำหรับ Orders)
+    Buyers.hasMany(models.Orders, { foreignKey: 'buyer_id', as: 'Buyer' });
+  };
+
   return Buyers;
 };

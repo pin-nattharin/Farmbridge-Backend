@@ -36,5 +36,14 @@ module.exports = (sequelize) => {
     timestamps: false
   });
 
+
+  Listings.associate = (models) => {
+    // (นี่คือความสัมพันธ์เดิมของคุณ)
+    Listings.belongsTo(models.Farmers, { foreignKey: 'seller_id', as: 'seller' });
+    // (นี่คือความสัมพันธ์ใหม่)
+    Listings.hasMany(models.Orders, { foreignKey: 'listing_id' });
+    Listings.hasMany(models.Matches, { foreignKey: 'listing_id' });
+  };
+
   return Listings;
 };
