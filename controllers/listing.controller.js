@@ -11,24 +11,78 @@ const allowedProducts = ['มะม่วง', 'มังคุด', 'ทุเ�
 const allowedGrades = ['เกรด B', 'เกรด C', 'เกรดต่ำกว่า C'];
 
 // GET all listings (ถูกต้อง)
+// controllers/listing.controller.js (exports.getAll ที่แก้ไขสมบูรณ์แล้ว)
+
 exports.getAll = async (req, res) => {
-  try {
-    const { product_name, status } = req.query;
-    const where = {};
-    if (product_name) where.product_name = product_name.trim();
-    if (status) where.status = status.trim();
-    const rows = await Listings.findAll({
-      where,
-      include: [
-        { model: Farmers, as: 'seller', attributes: ['id', 'fullname', 'email', 'phone', 'address'] }
-      ],
-      order: [['created_at', 'DESC']]
-    });
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Failed to fetch listings', error: err.message });
-  }
+    try {
+        const { product_name, status, distance } = req.query; // ดึง distance กลับมา
+        const where = {};
+        
+        // 1. กรองตามชื่อสินค้า
+        if (product_name && product_name !== 'all') {
+            where.product_name = product_name.trim();
+        }
+        // 2. กรองตามสถานะ
+        if (status) {
+            where.status = status.trim();
+        } else {
+            where.status = 'available'; // Default status
+        }
+
+        // 3. ดึง Listings ทั้งหมด (ใช้ db.Listings)
+        let rows = await Listings.findAll({
+            where,
+            include: [
+                { 
+                    model: Farmers, 
+                    as: 'seller', 
+                    attributes: ['id', 'fullname', 'address', 'location_geom'] // 🚨 ต้องมี location_geom
+                }
+            ],
+            order: [['created_at', 'DESC']]
+        });
+        
+        /* // 4. ตรวจสอบ Location Geom (จาก Middleware)
+        const userLocationGeom = req.identity?.model?.location_geom;
+
+        // 5. คำนวณและกรองตามระยะทาง (ถ้าผู้ใช้ล็อกอิน และเลือก Filter 'distance')
+        if (userLocationGeom && distance && distance !== 'all') {
+            const userLocation = userLocationGeom.coordinates; // [lng, lat]
+            const maxDistanceKm = Number(distance);
+            
+            rows = rows.filter(listing => {
+                const sellerLocation = listing.location_geom?.coordinates; 
+                
+                if (!sellerLocation) return false;
+                
+                const dist = haversineDistance(
+                    userLocation[1], userLocation[0],
+                    sellerLocation[1], sellerLocation[0]
+                );
+                
+                listing.dataValues.distance_km = dist; 
+                return dist <= maxDistanceKm;
+            });
+            
+            // เรียงลำดับตามระยะทาง
+            rows.sort((a, b) => a.dataValues.distance_km - b.dataValues.distance_km);
+        }
+        
+        // 6. เพิ่ม distance_km เป็น null สำหรับรายการที่ยังไม่มี (Public/ไม่มีพิกัด)
+        rows = rows.map(listing => {
+            if (listing.dataValues.distance_km === undefined) { 
+                listing.dataValues.distance_km = null; 
+            }
+            return listing;
+        }); */
+
+        // 7. ส่ง Response ที่ถูกต้องออกไป
+        res.json(rows); 
+        
+    } catch (err) {
+        console.error("Error in getAll listings:", err);
+        res.status(500).json({ message: 'Failed to fetch public listings', error: err.message });
+    }
 };
 
 // GET all listings for current farmer (ถูกต้อง)

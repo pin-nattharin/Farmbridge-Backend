@@ -8,7 +8,10 @@ module.exports.authenticateToken = async (req, res, next) => {
   try {
     const header = req.headers['authorization'];
     const token = header && header.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'No token provided' });
+    if (!token) {
+        req.identity = null; // ตั้งค่า identity เป็น null/undefined 
+        return next();
+    }
 
     // ตรวจสอบ token ว่าอยู่ใน blacklist หรือไม่
     const blacklisted = await InvalidTokens.findOne({ where: { token } });

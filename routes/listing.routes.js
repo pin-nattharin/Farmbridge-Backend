@@ -9,7 +9,7 @@ const { checkRole } = require('../middleware/role.middleware');
 router.get('/market-suggestion', listingController.marketSuggestion);
 
 // public
-router.get('/', listingController.getAll);
+router.get('/all', listingController.getAll);
 router.get('/my-listings',authenticateToken, checkRole('farmer'), listingController.getMyListings);
 router.get('/:id', listingController.getById);
 
