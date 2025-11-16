@@ -1,4 +1,3 @@
-
 const express = require('express');
 const router = express.Router();
 const orderController = require('../controllers/order.controller');
@@ -12,9 +11,6 @@ router.post('/',authenticateToken,checkRole('buyer'),orderController.createOrder
 
 // GET /api/orders/history/purchase (ดึงประวัติการซื้อของฉัน Buyer)
 router.get('/history/purchase',authenticateToken,checkRole('buyer'),orderController.getPurchaseHistory);
-
-
-
 
 // Farmer Routes (ฝั่งเกษตรกร)
 
