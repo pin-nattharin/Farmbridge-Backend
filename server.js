@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const admin = require('firebase-admin');
 const serviceAccount = require('./serviceAccountKey.json'); // ใส่ไฟล์นี้ด้วย
+const notificationRoutes = require('./routes/notification.routes');
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/listings', require('./routes/listing.routes'));
 app.use('/api/demands', require('./routes/demand.routes'));
+app.use('/api/notifications', notificationRoutes);
 
 const PORT = process.env.PORT || 3000;
 
